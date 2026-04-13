@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 258 84% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 20%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 93%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 258 84% 60%;
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 0 0% 5.5%;
+    --foreground: 0 0% 91%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 91%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 91%;
+    --primary: 258 84% 68%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 72%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 46%;
+    --accent: 0 0% 13%;
+    --accent-foreground: 0 0% 91%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 15%;
+    --input: 0 0% 13%;
+    --ring: 258 84% 68%;
+  }
+
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/30; }
+}
+
+@layer utilities {
+  .module-card {
+    @apply bg-card border border-border rounded-xl p-5;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+  }
+  .page-header { @apply text-2xl font-semibold tracking-tight text-foreground mb-0.5; }
+  .page-sub { @apply text-sm text-muted-foreground mb-6; }
+
+  .stat-card {
+    @apply bg-card border border-border rounded-xl p-4 transition-all duration-200;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .stat-card:hover {
+    @apply border-border/80;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transform: translateY(-1px);
+  }
+
+  .section-label {
+    @apply text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3;
+  }
+
+  .glass-card {
+    @apply rounded-xl border border-border/60 backdrop-blur-sm;
+    background: hsl(var(--card) / 0.8);
+  }
+}

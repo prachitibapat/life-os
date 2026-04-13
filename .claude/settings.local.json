@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install:*)",
+      "Bash(cat /c/life-os/AppData/Local/Temp/claude/C--life-os/*/tasks/bjc109kof.output)",
+      "Read(//c/Users/Prachiti/AppData/Local/Temp/claude/C--life-os/6e5c5d93-1662-4aac-8a5b-802c684d570a/tasks/**)",
+      "Bash(npx next:*)",
+      "Bash(ls /c/life-os/node_modules/.bin/next*)",
+      "Bash(./node_modules/.bin/next build:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:3000/api/dashboard)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(cmd /c \"taskkill /F /IM node.exe\")",
+      "Bash(cmd /c \"del /F /Q C:\\\\life-os\\\\data\\\\lifeos.db C:\\\\life-os\\\\data\\\\lifeos.db-shm C:\\\\life-os\\\\data\\\\lifeos.db-wal\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/admin/reset)",
+      "Bash(npx tsc:*)",
+      "Bash(gh auth:*)",
+      "Bash(git --version)",
+      "Bash(git config:*)",
+      "Bash(ls C:/life-os/.env*)"
+    ]
+  }
+}
