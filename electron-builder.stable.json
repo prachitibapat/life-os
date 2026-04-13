@@ -1,0 +1,38 @@
+{
+  "appId": "com.lifeos.app",
+  "productName": "Life OS",
+  "copyright": "Copyright © 2025",
+  "afterPack": "electron/after-pack.js",
+  "directories": {
+    "output": "dist-app"
+  },
+  "files": [
+    "dist-electron/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": ".next/standalone",
+      "to": "next-server",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      { "target": "nsis", "arch": ["x64"] }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "deleteAppDataOnUninstall": false
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "prachitibapat",
+    "repo": "life-os",
+    "channel": "latest"
+  }
+}

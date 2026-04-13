@@ -1,15 +1,26 @@
 {
   "name": "life-os",
   "version": "1.0.0",
+  "description": "A unified local productivity dashboard. No cloud, no auth, no tracking.",
+  "author": "PrachitiBapat",
   "private": true,
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "lint": "next lint",
     "start": "next start",
-    "lint": "next lint"
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "node scripts/build-electron.mjs",
+    "electron:build:rc": "node scripts/build-electron.mjs --rc",
+    "electron:dist": "node scripts/build-electron.mjs --publish",
+    "electron:dist:rc": "node scripts/build-electron.mjs --rc --publish"
   },
   "dependencies": {
-    "next": "14.2.5",
+    "electron-updater": "^6.3.0"
+  },
+  "devDependencies": {
+    "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.4",
@@ -43,9 +54,11 @@
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-accordion": "^1.2.0",
     "sonner": "^1.5.0",
-    "cmdk": "^1.0.0"
-  },
-  "devDependencies": {
+    "cmdk": "^1.0.0",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.8.1",
+    "concurrently": "^9.0.0",
+    "wait-on": "^8.0.0",
     "@types/node": "^20.14.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

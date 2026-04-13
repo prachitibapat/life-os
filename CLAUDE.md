@@ -5,13 +5,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # Start dev server at localhost:3000
-npm run build    # Production build
-npm run lint     # ESLint via next lint
-npm start        # Start production server (after build)
+# Development
+npm run dev                  # Next.js dev server at localhost:3000 (use this for daily development)
+npm run build                # Next.js production build
+npm run lint                 # ESLint via next lint
+
+# Desktop app (Electron)
+npm run electron:dev         # Electron window with hot reload — no installer, loads dev server
+npm run electron:build       # Build stable Windows .exe → dist-app/
+npm run electron:build:rc    # Build RC Windows .exe    → dist-app/
+
+# Publishing (triggers GitHub Actions equivalent locally)
+npm run electron:dist        # Build stable + publish to GitHub Releases
+npm run electron:dist:rc     # Build RC     + publish to GitHub Releases
 ```
 
 **Requirement:** Node.js 22.5+ (uses the built-in `node:sqlite` module — no `better-sqlite3` or other ORM).
+
+The build pipeline for the `.exe` is in `scripts/build-electron.mjs` — it runs `next build`, copies static assets into `.next/standalone/`, compiles `electron/` via `tsconfig.electron.json`, then runs `electron-builder`.
 
 ## Architecture
 
@@ -27,9 +38,36 @@ There is no ORM or query builder. All database access is raw SQL via the synchro
 
 ### Database (`lib/db.ts`)
 
-`getDb()` returns a module-level singleton `DatabaseSync` instance. It auto-creates the `data/lifeos.db` file, runs `initSchema()` (idempotent `CREATE TABLE IF NOT EXISTS`), seeds sample data once (guarded by `settings` row count), and ensures workout/nutrition templates exist.
+`getDb()` returns a module-level singleton `DatabaseSync` instance. It auto-creates the DB file, runs `initSchema()` (idempotent `CREATE TABLE IF NOT EXISTS`), seeds sample data once (guarded by `settings` row count), and ensures workout/nutrition templates exist.
+
+**DB path is environment-aware:**
+- In dev (`npm run dev`): `./data/lifeos.db` relative to `process.cwd()`
+- In the packaged Electron app: `%APPDATA%\Life OS\data\lifeos.db` (or `Life OS RC` for RC builds)
+
+The path is controlled by the `LIFEOS_DATA_DIR` env var, which `electron/main.ts` sets to `app.getPath('userData')/data` before starting the Next.js server. Never hardcode the DB path — always go through `getDb()`.
 
 Date columns are stored as `TEXT` in `YYYY-MM-DD` format. Tags and JSON blobs are stored as serialized JSON strings (e.g., `tags TEXT DEFAULT '[]'`).
+
+### Electron layer (`electron/main.ts`)
+
+In production the app runs as: **Electron main process → spawns Next.js standalone server via `utilityProcess.fork()` → opens `BrowserWindow` at `http://127.0.0.1:<port>`**. The Next.js server and all API routes run inside the utility process exactly as in development.
+
+Key behaviours:
+- `isDev = !app.isPackaged` — in dev, Electron just loads `http://localhost:3000` without starting its own server
+- Port is allocated dynamically at launch via `getFreePort()` (production only)
+- `autoUpdater.channel` is set to `'beta'` for RC builds and `'latest'` for stable builds, determined at runtime via `app.getName()`
+- The utility process is killed in `before-quit` to cleanly shut down the Next.js server
+
+### Two-channel release system
+
+There are two separate electron-builder configs producing two separate Windows apps that can coexist:
+
+| Config file | App name | `appId` | Update channel | `%APPDATA%` folder |
+|---|---|---|---|---|
+| `electron-builder.stable.json` | Life OS | `com.lifeos.app` | `latest` | `Life OS\` |
+| `electron-builder.rc.json` | Life OS RC | `com.lifeos.app.rc` | `beta` | `Life OS RC\` |
+
+GitHub Actions (`.github/workflows/release.yml`) detects the tag name: tags containing `-rc`/`-beta`/`-alpha` trigger the RC build; clean version tags (`v1.x.x`) trigger the stable build.
 
 ### Global state (`store/useStore.ts`)
 
