@@ -20,7 +20,8 @@
       "Bash(git config:*)",
       "Bash(ls C:/life-os/.env*)",
       "Bash(gh --version)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
