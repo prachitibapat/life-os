@@ -24,7 +24,8 @@
       "WebSearch",
       "Bash(npm audit:*)",
       "Bash(npm info:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
