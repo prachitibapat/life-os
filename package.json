@@ -1,6 +1,6 @@
 {
   "name": "life-os",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A unified local productivity dashboard. No cloud, no auth, no tracking.",
   "author": "PrachitiBapat",
   "private": true,
