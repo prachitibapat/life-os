@@ -18,7 +18,9 @@
       "Bash(gh auth:*)",
       "Bash(git --version)",
       "Bash(git config:*)",
-      "Bash(ls C:/life-os/.env*)"
+      "Bash(ls C:/life-os/.env*)",
+      "Bash(gh --version)",
+      "Bash(gh repo:*)"
     ]
   }
 }
