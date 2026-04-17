@@ -20,6 +20,7 @@ export function ThinkingClient() {
   const [open, setOpen] = useState(false);
   const [idea, setIdea] = useState('');
   const [form, setForm] = useState({ title:'', type:'article', source:'', summary:'', key_arguments:'', my_critique:'', rating:0, category:'general', tags:'' });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch('/api/thinking').then(r=>r.json()).then(setLogs);
@@ -27,10 +28,17 @@ export function ThinkingClient() {
   }, []);
 
   const addLog = async () => {
+    const e: Record<string, string> = {};
+    if (!form.title.trim()) e.title = 'Title is required';
+    else if (form.title.length > 200) e.title = 'Max 200 characters';
+    if (form.rating && (form.rating < 1 || form.rating > 5)) e.rating = 'Rating must be 1–5';
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
     const res = await fetch('/api/thinking', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ ...form, tags: form.tags.split(',').map(t=>t.trim()).filter(Boolean) }) });
-    if (res.ok) { const d = await res.json(); setLogs([d,...logs]); setOpen(false); toast.success('Log added'); }
-    else toast.error('Failed');
+      body: JSON.stringify({ ...form, title: form.title.trim(), tags: form.tags.split(',').map(t=>t.trim()).filter(Boolean) }) });
+    if (res.ok) { const d = await res.json(); setLogs([d,...logs]); setOpen(false); setErrors({}); toast.success('Log added'); }
+    else toast.error('Failed to add log');
   };
 
   const addIdea = async () => {
@@ -65,7 +73,11 @@ export function ThinkingClient() {
             <DialogHeader><DialogTitle>New Thinking Log</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Title</Label><Input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Book/article title" /></div>
+                <div>
+                  <Label>Title <span className="text-red-400">*</span></Label>
+                  <Input value={form.title} onChange={e=>{setForm({...form,title:e.target.value});setErrors(v=>({...v,title:''}));}} placeholder="Book/article title" className={errors.title?'border-red-500':''} />
+                  {errors.title && <p className="text-xs text-red-400 mt-0.5">{errors.title}</p>}
+                </div>
                 <div><Label>Type</Label>
                   <Select value={form.type} onValueChange={v=>setForm({...form,type:v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>

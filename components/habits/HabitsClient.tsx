@@ -33,10 +33,21 @@ export function HabitsClient() {
   const [habits, setHabits] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', frequency: 'daily', color: COLORS[0], icon: EMOJIS[0] });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function load() {
     const r = await fetch('/api/habits?history=true').then(r => r.json());
-    setHabits(Array.isArray(r) ? r : []);
+    const raw = Array.isArray(r) ? r : [];
+    // API returns `completed_today` (0|1) and `history` as date-string array
+    // Normalize to what the UI expects
+    const normalized = raw.map((h: any) => ({
+      ...h,
+      checked_today: !!h.completed_today,
+      history: Array.isArray(h.history)
+        ? Object.fromEntries(h.history.map((d: string) => [d, true]))
+        : (h.history || {}),
+    }));
+    setHabits(normalized);
   }
 
   useEffect(() => { load(); }, []);
@@ -47,10 +58,20 @@ export function HabitsClient() {
   }
 
   async function addHabit() {
-    if (!form.name.trim()) return;
-    const r = await fetch('/api/habits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-    if (r.ok) { toast.success('Habit created'); setForm({ name: '', frequency: 'daily', color: COLORS[0], icon: EMOJIS[0] }); setOpen(false); load(); }
-    else toast.error('Failed');
+    const e: Record<string, string> = {};
+    if (!form.name.trim()) e.name = 'Habit name is required';
+    else if (form.name.length > 100) e.name = 'Max 100 characters';
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
+    const r = await fetch('/api/habits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, name: form.name.trim() }) });
+    if (r.ok) {
+      toast.success('Habit created');
+      setForm({ name: '', frequency: 'daily', color: COLORS[0], icon: EMOJIS[0] });
+      setErrors({});
+      setOpen(false);
+      load();
+    } else toast.error('Failed to create habit');
   }
 
   async function deleteHabit(id: number) {
@@ -73,7 +94,16 @@ export function HabitsClient() {
           <DialogContent className="bg-zinc-900 border-zinc-800">
             <DialogHeader><DialogTitle>New Habit</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label>Name</Label><Input placeholder="Habit name…" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+              <div>
+                <Label>Name <span className="text-red-400">*</span></Label>
+                <Input
+                  placeholder="Habit name…"
+                  value={form.name}
+                  onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setErrors({}); }}
+                  className={errors.name ? 'border-red-500' : ''}
+                />
+                {errors.name && <p className="text-xs text-red-400 mt-0.5">{errors.name}</p>}
+              </div>
               <div><Label>Frequency</Label>
                 <Select value={form.frequency} onValueChange={v => setForm(f => ({ ...f, frequency: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

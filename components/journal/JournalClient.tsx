@@ -42,7 +42,12 @@ export function JournalClient() {
       setEntry(ent);
       setMood(ent.mood || 0);
       setContent(ent.content || '');
-      setPrompts({ went_well: ent.went_well || '', would_change: ent.would_change || '', grateful: ent.grateful || '' });
+      // DB columns are what_went_well / what_to_change / gratitude
+      setPrompts({
+        went_well: ent.what_went_well || '',
+        would_change: ent.what_to_change || '',
+        grateful: ent.gratitude || '',
+      });
     } else {
       setEntry(null);
       setMood(0);
@@ -62,13 +67,25 @@ export function JournalClient() {
 
   async function save() {
     setSaving(true);
-    const body: any = { date, mood, content, ...prompts };
-    const method = 'POST';
+    // Map local state keys → DB column names
+    const body: any = {
+      date, mood, content,
+      what_went_well: prompts.went_well,
+      what_to_change: prompts.would_change,
+      gratitude: prompts.grateful,
+    };
     const url = entry?.id ? `/api/journal/${entry.id}` : '/api/journal';
     const r = await fetch(url, { method: entry?.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     setSaving(false);
-    if (r.ok) { toast.success('Saved'); load(); }
-    else toast.error('Failed to save');
+    if (r.ok) {
+      const saved = await r.json();
+      setEntry(saved);
+      setRecents(prev => {
+        const filtered = prev.filter((e: any) => e.id !== saved.id);
+        return [saved, ...filtered].slice(0, 10);
+      });
+      toast.success('Saved');
+    } else toast.error('Failed to save');
   }
 
   return (

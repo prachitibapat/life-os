@@ -36,13 +36,15 @@ export function FitnessClient() {
   const [form, setForm] = useState({ name: '', type: 'strength', duration: '', date: today() });
   const [exercises, setExercises] = useState<Exercise[]>([{ name: '', sets: '', reps: '', weight: '' }]);
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function load() {
     const [w, t] = await Promise.all([
       fetch('/api/fitness').then(r => r.json()),
       fetch('/api/fitness/templates').then(r => r.json()),
     ]);
-    setWorkouts(Array.isArray(w) ? w : []);
+    // GET returns { workouts, personalRecords } — extract workouts
+    setWorkouts(Array.isArray(w) ? w : (Array.isArray(w?.workouts) ? w.workouts : []));
     setTemplates(Array.isArray(t) ? t : []);
   }
 
@@ -59,21 +61,33 @@ export function FitnessClient() {
   }
 
   async function logWorkout() {
-    if (!form.name.trim()) return;
+    const e: Record<string, string> = {};
+    if (!form.name.trim()) e.name = 'Workout name is required';
+    else if (form.name.length > 100) e.name = 'Max 100 characters';
+    if (form.duration) {
+      const d = Number(form.duration);
+      if (isNaN(d) || d < 1) e.duration = 'Must be at least 1 minute';
+      else if (d > 600) e.duration = 'Max 600 minutes (10 h)';
+    }
+    if (!form.date) e.date = 'Date is required';
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
     const exs = exercises
-      .filter(e => e.name.trim())
-      .map(e => ({ name: e.name, sets: Number(e.sets) || 0, reps: Number(e.reps) || 0, weight: Number(e.weight) || 0 }));
+      .filter(ex => ex.name.trim())
+      .map(ex => ({ name: ex.name, sets: Number(ex.sets) || 0, reps: Number(ex.reps) || 0, weight: Number(ex.weight) || 0 }));
     const r = await fetch('/api/fitness', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, duration: Number(form.duration) || 0, exercises: exs }),
     });
     if (r.ok) {
+      const newWorkout = await r.json();
+      setWorkouts(prev => [newWorkout, ...prev]);
       toast.success('Workout logged!');
       setOpen(false);
       setForm({ name: '', type: 'strength', duration: '', date: today() });
       setExercises([{ name: '', sets: '', reps: '', weight: '' }]);
-      load();
     } else toast.error('Failed to log workout');
   }
 
@@ -151,8 +165,14 @@ export function FitnessClient() {
             <div className="space-y-3 pt-1">
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <Label className="text-xs">Workout Name</Label>
-                  <Input placeholder="Push day…" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" />
+                  <Label className="text-xs">Workout Name <span className="text-red-400">*</span></Label>
+                  <Input
+                    placeholder="Push day…"
+                    value={form.name}
+                    onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setErrors(v => ({ ...v, name: '' })); }}
+                    className={`mt-1 ${errors.name ? 'border-red-500' : ''}`}
+                  />
+                  {errors.name && <p className="text-xs text-red-400 mt-0.5">{errors.name}</p>}
                 </div>
                 <div>
                   <Label className="text-xs">Type</Label>
@@ -169,11 +189,23 @@ export function FitnessClient() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Duration (min)</Label>
-                  <Input type="number" placeholder="60" value={form.duration} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))} className="mt-1" />
+                  <Input
+                    type="number" min="1" max="600" placeholder="60"
+                    value={form.duration}
+                    onChange={e => { setForm(f => ({ ...f, duration: e.target.value })); setErrors(v => ({ ...v, duration: '' })); }}
+                    className={`mt-1 ${errors.duration ? 'border-red-500' : ''}`}
+                  />
+                  {errors.duration && <p className="text-xs text-red-400 mt-0.5">{errors.duration}</p>}
                 </div>
                 <div>
-                  <Label className="text-xs">Date</Label>
-                  <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="mt-1" />
+                  <Label className="text-xs">Date <span className="text-red-400">*</span></Label>
+                  <Input
+                    type="date"
+                    value={form.date}
+                    onChange={e => { setForm(f => ({ ...f, date: e.target.value })); setErrors(v => ({ ...v, date: '' })); }}
+                    className={`mt-1 ${errors.date ? 'border-red-500' : ''}`}
+                  />
+                  {errors.date && <p className="text-xs text-red-400 mt-0.5">{errors.date}</p>}
                 </div>
               </div>
               <div>

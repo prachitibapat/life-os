@@ -25,6 +25,8 @@ export function TasksClient() {
   const [projOpen, setProjOpen] = useState(false);
   const [form, setForm] = useState({ title: '', priority: 'P3', due_date: '', estimated_minutes: '', project_id: '' });
   const [projName, setProjName] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [projError, setProjError] = useState('');
 
   async function load() {
     const [p, t] = await Promise.all([
@@ -41,14 +43,30 @@ export function TasksClient() {
   const todayTasks = tasks.filter(t => t.due_date === today() && t.status !== 'done');
 
   async function addTask() {
-    if (!form.title.trim()) return;
-    const body: any = { title: form.title, priority: form.priority };
+    const e: Record<string, string> = {};
+    if (!form.title.trim()) e.title = 'Title is required';
+    else if (form.title.length > 200) e.title = 'Max 200 characters';
+    if (form.estimated_minutes) {
+      const m = Number(form.estimated_minutes);
+      if (isNaN(m) || m < 1) e.estimated_minutes = 'Must be at least 1 minute';
+      else if (m > 1440) e.estimated_minutes = 'Max 1440 min (24 h)';
+    }
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
+    const body: any = { title: form.title.trim(), priority: form.priority };
     if (form.due_date) body.due_date = form.due_date;
     if (form.estimated_minutes) body.estimated_minutes = Number(form.estimated_minutes);
     if (form.project_id) body.project_id = Number(form.project_id);
     const r = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (r.ok) { toast.success('Task added'); setForm({ title: '', priority: 'P3', due_date: '', estimated_minutes: '', project_id: '' }); setAddOpen(false); load(); }
-    else toast.error('Failed');
+    if (r.ok) {
+      const newTask = await r.json();
+      setTasks(prev => [...prev, newTask]);
+      toast.success('Task added');
+      setForm({ title: '', priority: 'P3', due_date: '', estimated_minutes: '', project_id: '' });
+      setErrors({});
+      setAddOpen(false);
+    } else toast.error('Failed to add task');
   }
 
   async function updateStatus(id: number, status: string) {
@@ -63,9 +81,12 @@ export function TasksClient() {
   }
 
   async function addProject() {
-    if (!projName.trim()) return;
-    const r = await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: projName }) });
+    if (!projName.trim()) { setProjError('Project name is required'); return; }
+    if (projName.length > 100) { setProjError('Max 100 characters'); return; }
+    setProjError('');
+    const r = await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: projName.trim() }) });
     if (r.ok) { toast.success('Project created'); setProjName(''); setProjOpen(false); load(); }
+    else toast.error('Failed to create project');
   }
 
   return (
@@ -78,7 +99,16 @@ export function TasksClient() {
             <DialogTrigger asChild><Button size="icon" variant="ghost" className="h-6 w-6"><Plus size={14} /></Button></DialogTrigger>
             <DialogContent className="bg-zinc-900 border-zinc-800">
               <DialogHeader><DialogTitle>New Project</DialogTitle></DialogHeader>
-              <Input placeholder="Project name" value={projName} onChange={e => setProjName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addProject()} />
+              <div>
+                <Input
+                  placeholder="Project name"
+                  value={projName}
+                  onChange={e => { setProjName(e.target.value); setProjError(''); }}
+                  onKeyDown={e => e.key === 'Enter' && addProject()}
+                  className={projError ? 'border-red-500' : ''}
+                />
+                {projError && <p className="text-xs text-red-400 mt-0.5">{projError}</p>}
+              </div>
               <Button onClick={addProject}>Create</Button>
             </DialogContent>
           </Dialog>
@@ -103,7 +133,16 @@ export function TasksClient() {
             <DialogContent className="bg-zinc-900 border-zinc-800">
               <DialogHeader><DialogTitle>New Task</DialogTitle></DialogHeader>
               <div className="space-y-3">
-                <div><Label>Title</Label><Input placeholder="Task title…" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></div>
+                <div>
+                  <Label>Title <span className="text-red-400">*</span></Label>
+                  <Input
+                    placeholder="Task title…"
+                    value={form.title}
+                    onChange={e => { setForm(f => ({ ...f, title: e.target.value })); setErrors(v => ({ ...v, title: '' })); }}
+                    className={errors.title ? 'border-red-500' : ''}
+                  />
+                  {errors.title && <p className="text-xs text-red-400 mt-0.5">{errors.title}</p>}
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><Label>Priority</Label>
                     <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v }))}>
@@ -120,7 +159,16 @@ export function TasksClient() {
                       <SelectContent>{projects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div><Label>Est. Minutes</Label><Input type="number" placeholder="30" value={form.estimated_minutes} onChange={e => setForm(f => ({ ...f, estimated_minutes: e.target.value }))} /></div>
+                  <div>
+                    <Label>Est. Minutes</Label>
+                    <Input
+                      type="number" min="1" max="1440" placeholder="30"
+                      value={form.estimated_minutes}
+                      onChange={e => { setForm(f => ({ ...f, estimated_minutes: e.target.value })); setErrors(v => ({ ...v, estimated_minutes: '' })); }}
+                      className={errors.estimated_minutes ? 'border-red-500' : ''}
+                    />
+                    {errors.estimated_minutes && <p className="text-xs text-red-400 mt-0.5">{errors.estimated_minutes}</p>}
+                  </div>
                 </div>
                 <Button className="w-full bg-violet-600 hover:bg-violet-700" onClick={addTask}>Add Task</Button>
               </div>

@@ -16,6 +16,7 @@ export function SleepClient() {
   const [data, setData] = useState<{logs:any[],average:number,target:number}>({logs:[],average:0,target:8});
   const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], bedtime:'22:30', wake_time:'06:30', quality:4, notes:'' });
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => { fetch('/api/sleep?limit=14').then(r=>r.json()).then(setData); }, []);
 
@@ -29,12 +30,27 @@ export function SleepClient() {
   };
 
   const save = async () => {
+    const e: Record<string, string> = {};
+    if (!form.date) e.date = 'Date is required';
+    if (!form.bedtime) e.bedtime = 'Bedtime is required';
+    if (!form.wake_time) e.wake_time = 'Wake time is required';
+    if (form.quality < 1 || form.quality > 5) e.quality = 'Quality must be between 1 and 5';
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
     setSaving(true);
     const duration_hours = calcDuration(form.bedtime, form.wake_time);
     const res = await fetch('/api/sleep', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ ...form, duration_hours }) });
-    if (res.ok) { toast.success('Sleep logged'); fetch('/api/sleep?limit=14').then(r=>r.json()).then(setData); }
-    else toast.error('Failed');
+    if (res.ok) {
+      const newLog = await res.json();
+      toast.success('Sleep logged');
+      setData(prev => {
+        const logs = [newLog, ...prev.logs.filter((l: any) => l.date !== newLog.date)].slice(0, 14);
+        const avg = logs.length ? logs.reduce((s: number, l: any) => s + l.duration_hours, 0) / logs.length : 0;
+        return { ...prev, logs, average: Math.round(avg * 10) / 10 };
+      });
+    } else toast.error('Failed');
     setSaving(false);
   };
 
@@ -73,10 +89,22 @@ export function SleepClient() {
         <Card>
           <CardHeader><CardTitle className="text-base">Log Sleep</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            <div><Label>Date</Label><Input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} /></div>
+            <div>
+              <Label>Date <span className="text-red-400">*</span></Label>
+              <Input type="date" value={form.date} onChange={e=>{setForm({...form,date:e.target.value});setErrors(v=>({...v,date:''}));}} className={errors.date?'border-red-500':''} />
+              {errors.date && <p className="text-xs text-red-400 mt-0.5">{errors.date}</p>}
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Bedtime</Label><Input type="time" value={form.bedtime} onChange={e=>setForm({...form,bedtime:e.target.value})} /></div>
-              <div><Label>Wake time</Label><Input type="time" value={form.wake_time} onChange={e=>setForm({...form,wake_time:e.target.value})} /></div>
+              <div>
+                <Label>Bedtime <span className="text-red-400">*</span></Label>
+                <Input type="time" value={form.bedtime} onChange={e=>{setForm({...form,bedtime:e.target.value});setErrors(v=>({...v,bedtime:''}));}} className={errors.bedtime?'border-red-500':''} />
+                {errors.bedtime && <p className="text-xs text-red-400 mt-0.5">{errors.bedtime}</p>}
+              </div>
+              <div>
+                <Label>Wake time <span className="text-red-400">*</span></Label>
+                <Input type="time" value={form.wake_time} onChange={e=>{setForm({...form,wake_time:e.target.value});setErrors(v=>({...v,wake_time:''}));}} className={errors.wake_time?'border-red-500':''} />
+                {errors.wake_time && <p className="text-xs text-red-400 mt-0.5">{errors.wake_time}</p>}
+              </div>
             </div>
             <div>
               <p className="text-xs font-medium mb-1">Duration: {calcDuration(form.bedtime,form.wake_time)}h</p>

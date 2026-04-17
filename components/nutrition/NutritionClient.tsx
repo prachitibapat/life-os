@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RingProgress } from '@/components/dashboard/RingProgress';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Search, UtensilsCrossed } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Search, UtensilsCrossed, Sparkles, Link, ExternalLink } from 'lucide-react';
 import { today } from '@/lib/utils';
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
@@ -66,6 +66,11 @@ export function NutritionClient() {
   const [form, setForm] = useState({ name: '', meal_type: 'lunch', calories: '', protein: '', carbs: '', fat: '' });
   const [templateSearch, setTemplateSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [estimating, setEstimating] = useState(false);
+  const [estimateConfidence, setEstimateConfidence] = useState<'high'|'medium'|'low'|null>(null);
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function load() {
     const [ents, tmpl, sett] = await Promise.all([
@@ -73,7 +78,9 @@ export function NutritionClient() {
       fetch('/api/nutrition/templates').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
     ]);
-    setEntries(Array.isArray(ents) ? ents : []);
+    // GET returns { meals, totals, targets } — extract meals array
+    const meals = Array.isArray(ents) ? ents : (Array.isArray(ents?.meals) ? ents.meals : []);
+    setEntries(meals);
     setTemplates(Array.isArray(tmpl) ? tmpl : []);
     if (sett && typeof sett === 'object') setSettings(s => ({ ...s, ...sett }));
   }
@@ -87,9 +94,23 @@ export function NutritionClient() {
   }
 
   async function addMeal() {
-    if (!form.name.trim()) return;
+    const e: Record<string, string> = {};
+    if (!form.name.trim()) e.name = 'Meal name is required';
+    else if (form.name.length > 150) e.name = 'Max 150 characters';
+    const cal = Number(form.calories);
+    if (!form.calories) e.calories = 'Calories are required';
+    else if (isNaN(cal) || cal < 0) e.calories = 'Must be 0 or more';
+    else if (cal > 5000) e.calories = 'Max 5000 kcal per entry';
+    for (const [field, label] of [['protein', 'Protein'], ['carbs', 'Carbs'], ['fat', 'Fat']] as const) {
+      const v = Number(form[field]);
+      if (form[field] && (isNaN(v) || v < 0)) e[field] = `${label} must be 0 or more`;
+      else if (v > 500) e[field] = `${label} max 500g`;
+    }
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+
     const body = {
-      name: form.name, meal_type: form.meal_type, date,
+      name: form.name.trim(), meal_type: form.meal_type, date,
       calories: Number(form.calories) || 0,
       protein: Number(form.protein) || 0,
       carbs: Number(form.carbs) || 0,
@@ -99,11 +120,71 @@ export function NutritionClient() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     if (r.ok) {
+      const newEntry = await r.json();
+      setEntries(prev => [...prev, newEntry]);
       toast.success('Meal logged');
-      setForm({ name: '', meal_type: 'lunch', calories: '', protein: '', carbs: '', fat: '' });
+      resetForm();
       setOpen(false);
-      load();
     } else toast.error('Failed');
+  }
+
+  function resetForm() {
+    setForm({ name: '', meal_type: 'lunch', calories: '', protein: '', carbs: '', fat: '' });
+    setEstimateConfidence(null);
+    setSourceUrl('');
+    setShowUrlInput(false);
+    setErrors({});
+  }
+
+  async function estimateNutrition() {
+    if (!form.name.trim()) return;
+    setEstimating(true);
+    setEstimateConfidence(null);
+    try {
+      const r = await fetch(`/api/nutrition/estimate?name=${encodeURIComponent(form.name)}`);
+      const data = await r.json();
+      setForm(f => ({
+        ...f,
+        calories: String(data.calories),
+        protein: String(data.protein),
+        carbs: String(data.carbs),
+        fat: String(data.fat),
+      }));
+      setEstimateConfidence(data.confidence);
+      const msg = data.confidence === 'high'
+        ? 'Found in database'
+        : data.confidence === 'medium'
+          ? `Matched "${data.matched}" — verify if needed`
+          : 'Estimated from keywords — please verify';
+      toast.info(msg);
+    } catch {
+      toast.error('Could not estimate');
+    }
+    setEstimating(false);
+  }
+
+  async function saveAsTemplate() {
+    if (!form.name.trim() || !form.calories) return;
+    const r = await fetch('/api/nutrition/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: form.name,
+        calories: Number(form.calories) || 0,
+        protein: Number(form.protein) || 0,
+        carbs: Number(form.carbs) || 0,
+        fat: Number(form.fat) || 0,
+        source_url: sourceUrl,
+      }),
+    });
+    if (r.ok) {
+      const saved = await r.json();
+      setTemplates(prev => {
+        const exists = prev.find(t => t.id === saved.id);
+        return exists ? prev.map(t => t.id === saved.id ? saved : t) : [...prev, saved];
+      });
+      toast.success('Saved as template');
+    }
   }
 
   async function deleteMeal(id: number) {
@@ -121,6 +202,9 @@ export function NutritionClient() {
       carbs: String(t.carbs || ''),
       fat: String(t.fat || ''),
     });
+    setEstimateConfidence(null);
+    if (t.source_url) { setSourceUrl(t.source_url); setShowUrlInput(true); }
+    else { setSourceUrl(''); setShowUrlInput(false); }
   }
 
   const totalCals = entries.reduce((s, e) => s + (e.calories || 0), 0);
@@ -172,7 +256,7 @@ export function NutritionClient() {
           </button>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white">
               <Plus size={15} /> Log Meal
@@ -217,24 +301,106 @@ export function NutritionClient() {
                       onClick={() => applyTemplate(t)}
                       className="group flex flex-col text-left text-[11px] px-2.5 py-1.5 rounded-lg border border-border bg-secondary/40 hover:bg-amber-500/10 hover:border-amber-500/30 transition-all"
                     >
-                      <span className="text-foreground/80 font-medium leading-tight">{t.name}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-foreground/80 font-medium leading-tight">{t.name}</span>
+                        {t.source_url && (
+                          <a
+                            href={t.source_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="text-amber-500/60 hover:text-amber-400 transition-colors"
+                          >
+                            <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
                       <span className="text-muted-foreground">{t.calories} kcal · P{t.protein}g · C{t.carbs}g · F{t.fat}g</span>
                     </button>
                   ))}
                 </div>
               )}
               {templateSearch && filteredTemplates.length === 0 && (
-                <p className="text-xs text-muted-foreground py-2">
-                  No match — fill in nutrition manually below. It will be saved for next time.
-                </p>
+                <div className="py-2 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    No match in recipes — type the name above and estimate nutrition automatically, or fill in manually.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                      disabled={!templateSearch.trim() || estimating}
+                      onClick={() => {
+                        setForm(f => ({ ...f, name: templateSearch }));
+                        setTimeout(estimateNutrition, 0);
+                      }}
+                    >
+                      <Sparkles size={12} />
+                      {estimating ? 'Estimating…' : 'Auto-estimate nutrition'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1.5 text-xs text-muted-foreground"
+                      onClick={() => { setShowUrlInput(v => !v); }}
+                    >
+                      <Link size={12} />
+                      Add recipe URL
+                    </Button>
+                  </div>
+                  {showUrlInput && (
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        className="h-7 text-xs flex-1"
+                        placeholder="https://… (saved with template for reference)"
+                        value={sourceUrl}
+                        onChange={e => setSourceUrl(e.target.value)}
+                      />
+                      {sourceUrl && (
+                        <a href={sourceUrl} target="_blank" rel="noreferrer" className="text-amber-400 hover:text-amber-300">
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
             <div className="space-y-3 border-t border-border pt-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">Meal Name</Label>
-                  <Input className="mt-1" placeholder="e.g. Dal Tadka" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Meal Name</Label>
+                    {estimateConfidence && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        estimateConfidence === 'high' ? 'bg-green-500/15 text-green-400' :
+                        estimateConfidence === 'medium' ? 'bg-amber-500/15 text-amber-400' :
+                        'bg-zinc-500/20 text-zinc-400'
+                      }`}>
+                        {estimateConfidence === 'high' ? 'from DB' : estimateConfidence === 'medium' ? 'approximate' : 'estimated'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-1 mt-1">
+                    <Input
+                      className={`flex-1 ${errors.name ? 'border-red-500' : ''}`}
+                      placeholder="e.g. Dal Tadka"
+                      value={form.name}
+                      onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setEstimateConfidence(null); setErrors(v => ({ ...v, name: '' })); }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 px-2 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                      disabled={!form.name.trim() || estimating}
+                      onClick={estimateNutrition}
+                      title="Auto-estimate nutrition"
+                    >
+                      <Sparkles size={13} />
+                    </Button>
+                  </div>
                 </div>
                 <div>
                   <Label className="text-xs">Meal Type</Label>
@@ -247,26 +413,61 @@ export function NutritionClient() {
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-2">
-                <div><Label className="text-xs">kcal</Label><Input type="number" className="mt-1" value={form.calories} onChange={e => setForm(f => ({ ...f, calories: e.target.value }))} /></div>
-                <div><Label className="text-xs">Protein (g)</Label><Input type="number" className="mt-1" value={form.protein} onChange={e => setForm(f => ({ ...f, protein: e.target.value }))} /></div>
-                <div><Label className="text-xs">Carbs (g)</Label><Input type="number" className="mt-1" value={form.carbs} onChange={e => setForm(f => ({ ...f, carbs: e.target.value }))} /></div>
-                <div><Label className="text-xs">Fat (g)</Label><Input type="number" className="mt-1" value={form.fat} onChange={e => setForm(f => ({ ...f, fat: e.target.value }))} /></div>
+                <div>
+                  <Label className="text-xs">kcal <span className="text-red-400">*</span></Label>
+                  <Input type="number" min="0" className={`mt-1 ${errors.calories ? 'border-red-500' : ''}`} value={form.calories} onChange={e => { setForm(f => ({ ...f, calories: e.target.value })); setErrors(v => ({ ...v, calories: '' })); }} />
+                  {errors.calories && <p className="text-xs text-red-400 mt-0.5 leading-tight">{errors.calories}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs">Protein (g)</Label>
+                  <Input type="number" min="0" className={`mt-1 ${errors.protein ? 'border-red-500' : ''}`} value={form.protein} onChange={e => { setForm(f => ({ ...f, protein: e.target.value })); setErrors(v => ({ ...v, protein: '' })); }} />
+                  {errors.protein && <p className="text-xs text-red-400 mt-0.5 leading-tight">{errors.protein}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs">Carbs (g)</Label>
+                  <Input type="number" min="0" className={`mt-1 ${errors.carbs ? 'border-red-500' : ''}`} value={form.carbs} onChange={e => { setForm(f => ({ ...f, carbs: e.target.value })); setErrors(v => ({ ...v, carbs: '' })); }} />
+                  {errors.carbs && <p className="text-xs text-red-400 mt-0.5 leading-tight">{errors.carbs}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs">Fat (g)</Label>
+                  <Input type="number" min="0" className={`mt-1 ${errors.fat ? 'border-red-500' : ''}`} value={form.fat} onChange={e => { setForm(f => ({ ...f, fat: e.target.value })); setErrors(v => ({ ...v, fat: '' })); }} />
+                  {errors.fat && <p className="text-xs text-red-400 mt-0.5 leading-tight">{errors.fat}</p>}
+                </div>
               </div>
+
+              {/* URL field — shown if url was added from "no match" section or from template */}
+              {showUrlInput && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Recipe URL (optional, saved with template)</Label>
+                  <div className="flex gap-1 mt-1">
+                    <Input
+                      className="flex-1 h-8 text-xs"
+                      placeholder="https://…"
+                      value={sourceUrl}
+                      onChange={e => setSourceUrl(e.target.value)}
+                    />
+                    {sourceUrl && (
+                      <a href={sourceUrl} target="_blank" rel="noreferrer"
+                        className="flex items-center px-2 rounded border border-border text-muted-foreground hover:text-amber-400 transition-colors">
+                        <ExternalLink size={13} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-white" onClick={addMeal}>
                   Log Meal
                 </Button>
                 {form.name && form.calories && (
-                  <Button
-                    variant="outline"
-                    className="text-xs"
-                    onClick={async () => {
-                      const body = { name: form.name, calories: Number(form.calories) || 0, protein: Number(form.protein) || 0, carbs: Number(form.carbs) || 0, fat: Number(form.fat) || 0 };
-                      const r = await fetch('/api/nutrition/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                      if (r.ok) { toast.success('Saved as template'); load(); }
-                    }}
-                  >
-                    Save Template
+                  <Button variant="outline" className="text-xs gap-1" onClick={saveAsTemplate}>
+                    Save as Template
+                  </Button>
+                )}
+                {!showUrlInput && (
+                  <Button variant="ghost" className="text-xs px-2 text-muted-foreground" onClick={() => setShowUrlInput(true)} title="Add recipe URL">
+                    <Link size={13} />
                   </Button>
                 )}
               </div>
