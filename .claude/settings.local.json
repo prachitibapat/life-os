@@ -21,6 +21,10 @@
       "Bash(ls C:/life-os/.env*)",
       "Bash(gh --version)",
       "Bash(gh repo:*)",
+      "WebSearch",
+      "Bash(npm audit:*)",
+      "Bash(npm info:*)",
+      "Bash(dir:*)",
       "Bash(npm test:*)"
     ]
   }

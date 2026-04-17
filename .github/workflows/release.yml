@@ -1,0 +1,62 @@
+name: Build & Release
+
+# Triggers on any version tag pushed to GitHub.
+#
+#   v1.1.0-rc.1  →  builds "Life OS RC"  → published as a prerelease
+#   v1.1.0       →  builds "Life OS"     → published as a stable release
+#
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Detect build type from tag
+        id: tag
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == *"-rc"* ]] || [[ "$TAG" == *"-beta"* ]] || [[ "$TAG" == *"-alpha"* ]]; then
+            echo "is_rc=true"          >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=true"  >> "$GITHUB_OUTPUT"
+            echo "label=RC"            >> "$GITHUB_OUTPUT"
+          else
+            echo "is_rc=false"         >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "label=stable"        >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build RC and publish to GitHub Releases
+        if: steps.tag.outputs.is_rc == 'true'
+        run: node scripts/build-electron.mjs --rc --publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: false
+          EP_PRE_RELEASE: true
+
+      - name: Build stable and publish to GitHub Releases
+        if: steps.tag.outputs.is_rc == 'false'
+        run: node scripts/build-electron.mjs --publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: false
+          EP_PRE_RELEASE: false

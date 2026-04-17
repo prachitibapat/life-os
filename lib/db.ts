@@ -2,7 +2,10 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 
-const DB_DIR = path.join(process.cwd(), 'data');
+// In the packaged Electron app, LIFEOS_DATA_DIR is set by the main process to
+// the user's AppData/Roaming directory so the database survives updates/reinstalls.
+// In dev (npm run dev), this env var is unset and we fall back to process.cwd()/data.
+const DB_DIR = process.env.LIFEOS_DATA_DIR ?? path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'lifeos.db');
 
 let db: DatabaseSync | null = null;

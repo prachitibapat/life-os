@@ -18,6 +18,10 @@ data/
 # Build artifacts
 tsconfig.tsbuildinfo
 
+# Electron build output
+dist-electron/
+dist-app/
+
 # OS files
 .DS_Store
 Thumbs.db
